@@ -69,11 +69,38 @@ def fetch_page(where: str, offset: int, count: int) -> list:
     return data.get("features", [])
 
 
-def feature_to_geojson_feature(f: dict) -> dict:
+def arcgis_to_geojson_geometry(geom: dict | None) -> dict | None:
+    """Convert ArcGIS REST geometry to GeoJSON geometry."""
+    if not geom:
+        return None
+    # Polygon: rings → type + coordinates
+    if "rings" in geom:
+        rings = geom["rings"]
+        if not rings:
+            return None
+        return {"type": "Polygon", "coordinates": rings}
+    # Polyline: paths → LineString or MultiLineString
+    if "paths" in geom:
+        paths = geom["paths"]
+        if not paths:
+            return None
+        if len(paths) == 1:
+            return {"type": "LineString", "coordinates": paths[0]}
+        return {"type": "MultiLineString", "coordinates": paths}
+    # Point: x,y → coordinates
+    if "x" in geom and "y" in geom:
+        return {"type": "Point", "coordinates": [geom["x"], geom["y"]]}
+    return None
+
+
+def feature_to_geojson_feature(f: dict) -> dict | None:
+    geom = arcgis_to_geojson_geometry(f.get("geometry"))
+    if geom is None:
+        return None
     return {
         "type": "Feature",
         "properties": f.get("attributes", {}),
-        "geometry": f.get("geometry"),
+        "geometry": geom,
     }
 
 
@@ -114,9 +141,12 @@ def main():
                 batch = min(MAX_REC, total - offset)
                 features = fetch_page(where, offset, batch)
                 for feat in features:
+                    gj = feature_to_geojson_feature(feat)
+                    if gj is None:
+                        continue
                     if not first:
                         fh.write(",")
-                    fh.write(json.dumps(feature_to_geojson_feature(feat), ensure_ascii=False))
+                    fh.write(json.dumps(gj, ensure_ascii=False))
                     first = False
                     written += 1
                 pbar.update(len(features))
