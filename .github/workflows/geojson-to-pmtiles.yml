@@ -76,9 +76,17 @@ jobs:
           ls -lh parcels.pmtiles
           echo "Conversion complete."
 
-      # ── 6. Upload parcels.pmtiles as release asset ───────────────────────
+      # ── 6. Upload as workflow artifact (always available, even if release fails)
+      - name: Upload PMTiles artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: parcels-pmtiles
+          path: parcels.pmtiles
+
+      # ── 7. Create Release (optional; requires repo "Read and write" permissions)
       - name: Create Release and upload PMTiles
         uses: softprops/action-gh-release@v2
+        continue-on-error: true   # Don't fail job if release permissions missing
         with:
           tag_name: pmtiles-${{ github.run_number }}
           name: "Jamaica Parcels PMTiles - Build ${{ github.run_number }}"
