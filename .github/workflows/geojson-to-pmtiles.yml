@@ -1,0 +1,83 @@
+# .github/workflows/geojson-to-pmtiles.yml
+#
+# Converts gzip-compressed parish GeoJSON files to a single parcels.pmtiles
+# using tippecanoe on a Linux runner.
+#
+# Repo structure expected:
+#   parish_data/
+#     parcels_Kingston.geojson.gz
+#     parcels_St__Catherine.geojson.gz
+#     ... (all 14 parish files, gzip compressed)
+#   .github/workflows/geojson-to-pmtiles.yml
+
+name: Convert GeoJSON to PMTiles
+
+on:
+  workflow_dispatch:
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout repo ─────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # ── 2. Install tippecanoe ────────────────────────────────────────────
+      - name: Install tippecanoe
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libsqlite3-dev zlib1g-dev build-essential
+          git clone https://github.com/felt/tippecanoe.git
+          cd tippecanoe && make -j$(nproc) && sudo make install
+          tippecanoe --version
+
+      # ── 3. Decompress all GeoJSON files ──────────────────────────────────
+      - name: Decompress GeoJSON files
+        run: |
+          echo "Decompressing parish files..."
+          gunzip -v parish_data/*.geojson.gz
+          echo ""
+          echo "Decompressed files:"
+          ls -lh parish_data/*.geojson
+          echo ""
+          echo "Total uncompressed size:"
+          du -sh parish_data/
+
+      # ── 4. Run tippecanoe across all parish files ────────────────────────
+      - name: Convert to PMTiles
+        run: |
+          tippecanoe \
+            --output=parcels.pmtiles \
+            --layer=parcels \
+            --minimum-zoom=12 \
+            --maximum-zoom=18 \
+            --drop-densest-as-needed \
+            --extend-zooms-if-still-dropping \
+            --force \
+            parish_data/*.geojson
+
+      # ── 5. Show output info ─────────────────────────────────────────────
+      - name: Show output info
+        run: |
+          ls -lh parcels.pmtiles
+          echo "Conversion complete."
+
+      # ── 6. Upload parcels.pmtiles as release asset ───────────────────────
+      - name: Create Release and upload PMTiles
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pmtiles-${{ github.run_number }}
+          name: "Jamaica Parcels PMTiles - Build ${{ github.run_number }}"
+          body: |
+            Auto-generated from parish GeoJSON files.
+            - Source: eLandJamaica NLA GIS portal
+            - Parcels: ~1,005,470 island-wide
+            - Zoom levels: 12–18
+            - CRS: WGS84
+          files: parcels.pmtiles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

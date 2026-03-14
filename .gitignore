@@ -1,5 +1,11 @@
-# Output
+# Output (parish_data/*.geojson.gz tracked via LFS)
 *.geojson
+*.geojson.gz
+!parish_data/*.geojson.gz
+
+# Debug
+conversion_debug.png
+conversion_error.png
 
 # Python
 __pycache__/
