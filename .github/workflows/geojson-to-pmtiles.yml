@@ -4,6 +4,9 @@
 # using tippecanoe on a Linux runner.
 #
 # Processes per-parish then merges to avoid OOM on standard runner (7GB RAM).
+#
+# If "Resource not accessible by integration" occurs: Settings → Actions →
+# General → Workflow permissions → select "Read and write permissions".
 
 name: Convert GeoJSON to PMTiles
 
@@ -11,13 +14,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # Required for softprops/action-gh-release to create releases
+  contents: write
 
 jobs:
   convert:
     runs-on: ubuntu-latest
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # Opt into Node 24 (Node 20 deprecated)
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"   # Opt into Node 24 (Node 20 deprecated)
 
     steps:
       # ── 1. Checkout repo ─────────────────────────────────────────────────
@@ -86,5 +89,3 @@ jobs:
             - Zoom levels: 12–18
             - CRS: WGS84
           files: parcels.pmtiles
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
