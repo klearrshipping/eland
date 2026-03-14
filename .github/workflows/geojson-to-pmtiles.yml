@@ -3,12 +3,7 @@
 # Converts gzip-compressed parish GeoJSON files to a single parcels.pmtiles
 # using tippecanoe on a Linux runner.
 #
-# Repo structure expected:
-#   parish_data/
-#     parcels_Kingston.geojson.gz
-#     parcels_St__Catherine.geojson.gz
-#     ... (all 14 parish files, gzip compressed)
-#   .github/workflows/geojson-to-pmtiles.yml
+# Processes per-parish then merges to avoid OOM on standard runner (7GB RAM).
 
 name: Convert GeoJSON to PMTiles
 
@@ -22,7 +17,7 @@ jobs:
     steps:
       # ── 1. Checkout repo ─────────────────────────────────────────────────
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -47,22 +42,29 @@ jobs:
           echo "Total uncompressed size:"
           du -sh parish_data/
 
-      # ── 4. Run tippecanoe across all parish files ────────────────────────
-      - name: Convert to PMTiles
+      # ── 4. Convert each parish to PMTiles (reduces memory vs single run) ──
+      - name: Convert parishes to PMTiles
         run: |
-          tippecanoe \
-            --output=parcels.pmtiles \
-            --layer=parcels \
-            --minimum-zoom=12 \
-            --maximum-zoom=18 \
-            --drop-densest-as-needed \
-            --extend-zooms-if-still-dropping \
-            --force \
-            parish_data/*.geojson
+          mkdir -p parish_pmtiles
+          for f in parish_data/*.geojson; do
+            name=$(basename "$f" .geojson)
+            echo "Converting $name..."
+            tippecanoe \
+              --output="parish_pmtiles/${name}.pmtiles" \
+              --layer=parcels \
+              --minimum-zoom=12 \
+              --maximum-zoom=18 \
+              --drop-densest-as-needed \
+              --extend-zooms-if-still-dropping \
+              --force \
+              "$f"
+          done
+          ls -lh parish_pmtiles/
 
-      # ── 5. Show output info ─────────────────────────────────────────────
-      - name: Show output info
+      # ── 5. Merge all parish PMTiles into one ───────────────────────────
+      - name: Merge parish PMTiles
         run: |
+          tile-join -o parcels.pmtiles --force parish_pmtiles/*.pmtiles
           ls -lh parcels.pmtiles
           echo "Conversion complete."
 
